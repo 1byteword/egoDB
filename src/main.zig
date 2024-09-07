@@ -2,7 +2,12 @@
 //! you are building an executable. If you are making a library, the convention
 //! is to delete this file and start with root.zig instead.
 const std = @import("std");
+const kdtree_benchmark = @import("tests/kdtree_benchmark.zig");
+
 const Allocator = std.mem.Allocator;
+const time = std.time;
+const Random = std.rand.Random;
+const DefaultPrng = std.rand.DefaultPrng;
 
 fn abs(x: f32) f32 {
     return if (x < 0) -x else x;
@@ -215,47 +220,17 @@ pub const Vector = struct {
 };
 
 pub fn main() !void {
-    std.debug.print("Spinning up our EgoDB...\n", .{});
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var kdtree = KdTree.init(allocator, 3);
-    defer kdtree.deinit();
-
-    const points = [_][]const f32{
-        &[_]f32{ 1, 2, 3 },
-        &[_]f32{ 4, 5, 6 },
-        &[_]f32{ 7, 8, 9 },
-        &[_]f32{ 2, 3, 4 },
-        &[_]f32{ 5, 6, 7 },
-    };
-
-    for (points) |point_data| {
-        var point = try Vector.init(allocator, 3);
-        defer point.deinit(allocator);
-        @memcpy(point.data, point_data);
-        try kdtree.insert(point);
-    }
-
-    // Find nearest neighbor
-    var target = try Vector.init(allocator, 3);
-    defer target.deinit(allocator);
-    target.data[0] = 3;
-    target.data[1] = 4;
-    target.data[2] = 5;
-
-    std.debug.print("Finding nearest neighbor for: ", .{});
-    printVector(target);
-
-    if (kdtree.nearestNeighbor(target)) |nearest| {
-        std.debug.print("Nearest neighbor: ", .{});
-        printVector(nearest);
-    } else {
-        std.debug.print("No nearest neighbor found.\n", .{});
-    }
+    std.debug.print("Running KdTree benchmark...\n", .{});
+    try kdtree_benchmark.run();
 }
 
+fn generateRandomVector(allocator: std.mem.Allocator, dimensions: u32, random: *std.rand.Xoroshiro128) !Vector {
+    var vec = try Vector.init(allocator, dimensions);
+    for (0..dimensions) |i| {
+        vec.data[i] = random.random().float(f32) * 100.0; // Random float between 0 and 100
+    }
+    return vec;
+}
 fn printVector(v: Vector) void {
     for (v.data) |value| {
         std.debug.print("{d:.2} ", .{value});
