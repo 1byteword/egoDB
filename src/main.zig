@@ -3,6 +3,7 @@
 //! is to delete this file and start with root.zig instead.
 const std = @import("std");
 const kdtree_benchmark = @import("tests/kdtree_benchmark.zig");
+pub const vector_db = @import("db.zig");
 
 const Allocator = std.mem.Allocator;
 const time = std.time;
@@ -97,6 +98,53 @@ pub const KdTree = struct {
         if (dist_split < best_dist.*) {
             if (other_branch) |branch| {
                 self.nearestNeighborRec(branch, target, depth + 1, best, best_dist);
+            }
+        }
+    }
+
+    pub fn kNearestNeighbors(self: *KdTree, target: Vector, k: usize) ![]struct { vector: Vector, distance: f32, index: usize } {
+        var results = std.ArrayList(struct { vector: Vector, distance: f32, index: usize }).init(self.allocator);
+        defer results.deinit();
+
+        if (self.root) |root| {
+            try self.kNearestNeighborsRec(root, target, k, &results, 0);
+        }
+
+        return results.toOwnedSlice();
+    }
+
+    fn kNearestNeighborsRec(self: *KdTree, node: *Node, target: Vector, k: usize, results: *std.ArrayList(struct { vector: Vector, distance: f32, index: usize }), index: usize) !void {
+        const dist = target.euclideanDistance(node.point);
+
+        if (results.items.len < k) {
+            try results.append(.{ .vector = node.point, .distance = dist, .index = index });
+            std.sort.sort(struct { vector: Vector, distance: f32, index: usize }, results.items, {}, struct {
+                fn lessThan(_: void, a: struct { vector: Vector, distance: f32, index: usize }, b: struct { vector: Vector, distance: f32, index: usize }) bool {
+                    return a.distance < b.distance;
+                }
+            }.lessThan);
+        } else if (dist < results.items[k - 1].distance) {
+            results.items[k - 1] = .{ .vector = node.point, .distance = dist, .index = index };
+            std.sort.sort(struct { vector: Vector, distance: f32, index: usize }, results.items, {}, struct {
+                fn lessThan(_: void, a: struct { vector: Vector, distance: f32, index: usize }, b: struct { vector: Vector, distance: f32, index: usize }) bool {
+                    return a.distance < b.distance;
+                }
+            }.lessThan);
+        }
+
+        const split_dim = index % self.dimensions;
+        const diff = target.data[split_dim] - node.point.data[split_dim];
+
+        const next_branch = if (diff < 0) node.left else node.right;
+        const other_branch = if (diff < 0) node.left else node.right;
+
+        if (next_branch) |branch| {
+            try self.kNearestNeighborsRec(branch, target, k, results, index + 1);
+        }
+
+        if (other_branch) |branch| {
+            if (results.items.len < k or abs(diff) < results.items[results.items.len - 1].distance) {
+                try self.kNearestNeighborsRec(branch, target, k, results, index + 1);
             }
         }
     }
@@ -220,8 +268,10 @@ pub const Vector = struct {
 };
 
 pub fn main() !void {
-    std.debug.print("Running KdTree benchmark...\n", .{});
-    try kdtree_benchmark.run();
+    //std.debug.print("Running KdTree benchmark...\n", .{});
+    std.debug.print("Running KdTree's OpenAI Embeddings K-Nearest Neighbors Search...\n", .{});
+
+    try vector_db.main();
 }
 
 fn generateRandomVector(allocator: std.mem.Allocator, dimensions: u32, random: *std.rand.Xoroshiro128) !Vector {
